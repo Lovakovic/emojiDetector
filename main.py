@@ -17,20 +17,11 @@ def limit_vram_usage():
         tf.config.experimental.set_memory_growth(gpu, True)
 
 
-def to_class(prediction) -> str:
-    # Unwrap it
-    prediction = prediction[0]
-    most_certain = prediction[0]
-    index = 0
+def to_class(predictions) -> str:
+    index = np.argmax(predictions)
+    label = labels[index]
 
-    for i in range(len(prediction)):
-        certainty = prediction[i]
-
-        if certainty > most_certain:
-            most_certain = certainty
-            index = i
-
-    return labels[index]
+    return label
 
 
 if __name__ == '__main__':
@@ -90,26 +81,15 @@ if __name__ == '__main__':
 
     history = model.fit(train, epochs=20, validation_data=val, verbose=1)
 
-    # img = cv2.imread(os.path.join(data_dir, 'test', 'grinning face', 'twitter.png'))
-    # resize = tf.image.resize(img, (256, 256))
-    # Since model expects a batch of images we have to
-    # yhat = model.predict(np.expand_dims(resize/255, 0))
-    # print(to_class(yhat))
-
-    img = keras.utils.load_img(
-        os.path.join(data_dir, 'test', 'alien', 'facebook.jpeg'),
-        target_size=(256, 256)
-    )
-
-    np_array_img = tf.keras.preprocessing.image.img_to_array(img)
-    plt.imshow(np_array_img)
+    # Loading in image for prediction test
+    img = cv2.cvtColor(cv2.imread(os.path.join(data_dir, 'test', 'ghost', 'facebook.jpeg')), cv2.COLOR_BGR2RGB)
+    img = cv2.resize(img, (256, 256))
+    plt.imshow(img)
     plt.show()
 
-    img_array = keras.utils.img_to_array(img)
-    img_array = tf.expand_dims(img_array, 0)
+    # Wrap the array with another array so the images has required shape
+    img = np.expand_dims(img, 0)
 
-    predictions = model.predict(img_array)
-    score = tf.nn.softmax(predictions[0])
+    predictions = model.predict(img)
 
-    print(f'Boop! Beep! Boop! The machine thinks that this is {labels[np.argmax(score)]} with {100 * np.max(score)}%'
-          f' confidence.')
+    print(f'Boop! Beep! Boop! The machine thinks that this is {to_class(predictions)}')
