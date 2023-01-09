@@ -1,12 +1,15 @@
+import numpy as np
 import tensorflow as tf
+import matplotlib.pyplot as plt
 import os
+import cv2
 from tensorflow import keras
 from keras.layers import Conv2D, MaxPool2D, Dense, Flatten
 
 
 def limit_vram_usage():
     """
-    Prevents tensorflow from using entire gpu VRAM
+    Prevents tensorflow from using entire GPU VRAM
     :return: None
     """
     gpus = tf.config.experimental.list_physical_devices('GPU')
@@ -14,46 +17,45 @@ def limit_vram_usage():
         tf.config.experimental.set_memory_growth(gpu, True)
 
 
-def load_labels() -> dict[int, str]:
-    """
-    Loads labels from a csv file in data dir
-    :return: Labels dict containing image name (int) and its name
-    """
-    labels = {}
+def to_class(prediction) -> str:
+    # Unwrap it
+    prediction = prediction[0]
+    most_certain = prediction[0]
+    index = 0
 
-    with open(os.path.join('data', 'labels.csv'), 'r') as labels_file:
-        lines = labels_file.readlines()
+    for i in range(len(prediction)):
+        certainty = prediction[i]
 
-        for line in lines:
-            tokens = line.split(',')
-            labels[int(tokens[0])] = tokens[1].replace('\n', '')
+        if certainty > most_certain:
+            most_certain = certainty
+            index = i
 
-    return labels
+    return labels[index]
 
 
 if __name__ == '__main__':
+
     limit_vram_usage()
 
-    # Load the label for each image
-    img_labels = load_labels()
+    data_dir = os.path.join('data')
 
     # Load the data (shuffles it by default)
-    train_dir = os.path.join('data', 'train')
+    train_dir = os.path.join(data_dir, 'train')
     data = keras.utils.image_dataset_from_directory(train_dir)
 
-    # iterator = train_data.as_numpy_iterator()
-    # batch = iterator.next()
-    # print(batch[0].shape)
+    # Make labels global so they dont need to be passed into a function
+    global labels
+    labels = data.class_names
+    num_classes = len(labels)
 
     # Scale the color values down to improve neural network efficiency
     data = data.map(lambda img, label: (img / 255, label))
 
+    # Split the data
     train_size = int(len(data) * .7) + 1
     val_size = int(len(data) * .2)
     test_size = int(len(data) * .1)
-    # print(str(len(data)) + ' ' + str(train_size) + ' ' + str(val_size) + ' ' + str(test_size))
 
-    # Split the data
     train = data.take(train_size)
     val = data.skip(train_size).take(val_size)
     test = data.skip(train_size + val_size).take(test_size)
@@ -75,10 +77,39 @@ if __name__ == '__main__':
 
         Dense(256, activation='relu'),
 
-        # 207 different emojis
-        Dense(207, activation='sigmoid')
+        # Output layer
+        Dense(num_classes, name='outputs')
     ])
 
-    model.compile(optimizer='adam', loss=tf.losses.BinaryCrossentropy(), metrics=['accuracy'])
+    # It is important to use loss function that is compatible with number of classes or labels that we have,
+    # for example, initially I trued using BinaryCrossentropy (which doesn't make sense as there are more than
+    # two labels)
+    model.compile(optimizer='adam',
+                  loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+                  metrics=['accuracy'])
 
     history = model.fit(train, epochs=20, validation_data=val, verbose=1)
+
+    # img = cv2.imread(os.path.join(data_dir, 'test', 'grinning face', 'twitter.png'))
+    # resize = tf.image.resize(img, (256, 256))
+    # Since model expects a batch of images we have to
+    # yhat = model.predict(np.expand_dims(resize/255, 0))
+    # print(to_class(yhat))
+
+    img = keras.utils.load_img(
+        os.path.join(data_dir, 'test', 'alien', 'facebook.jpeg'),
+        target_size=(256, 256)
+    )
+
+    np_array_img = tf.keras.preprocessing.image.img_to_array(img)
+    plt.imshow(np_array_img)
+    plt.show()
+
+    img_array = keras.utils.img_to_array(img)
+    img_array = tf.expand_dims(img_array, 0)
+
+    predictions = model.predict(img_array)
+    score = tf.nn.softmax(predictions[0])
+
+    print(f'Boop! Beep! Boop! The machine thinks that this is {labels[np.argmax(score)]} with {100 * np.max(score)}%'
+          f' confidence.')
