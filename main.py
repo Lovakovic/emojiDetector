@@ -1,8 +1,8 @@
+import time
 import numpy as np
 import tensorflow as tf
-import matplotlib.pyplot as plt
 import os
-import cv2
+from img_handling import load_single_img, load_and_crop
 from tensorflow import keras
 from keras.layers import Conv2D, MaxPool2D, Dense, Flatten
 
@@ -22,6 +22,31 @@ def to_class(predictions) -> str:
     label = labels[index]
 
     return label
+
+
+def predict_one(model, path):
+    img = load_single_img(path)
+
+    predictions = model.predict(img)
+
+    print('Boop! Beep! Boop!')
+    time.sleep(0.15)
+    print(f'The machine thinks that this is {to_class(predictions)}')
+
+
+def predict_batch(model, path):
+    img_batch = load_and_crop(path)
+
+    predictions = []
+    for img in img_batch:
+        prediction = model.predict(img)
+        predictions.append(to_class(prediction))
+
+    predictions = ', '.join(predictions)
+    print('Boop! Beep! Boop!')
+    time.sleep(0.25)
+    print('The machine thinks the image consists of the following emojis:')
+    print(predictions)
 
 
 if __name__ == '__main__':
@@ -79,17 +104,27 @@ if __name__ == '__main__':
                   loss=keras.losses.SparseCategoricalCrossentropy(from_logits=True),
                   metrics=['accuracy'])
 
-    history = model.fit(train, epochs=20, validation_data=val, verbose=1)
+    begin_time = time.time()
+    history = model.fit(train, epochs=100, validation_data=val, verbose=1)
+    print(f'The model took {time.time() - begin_time} seconds to train.')
 
-    # Loading in image for prediction test
-    img = cv2.cvtColor(cv2.imread(os.path.join(data_dir, 'test', 'ghost', 'facebook.jpeg')), cv2.COLOR_BGR2RGB)
-    img = cv2.resize(img, (256, 256))
-    plt.imshow(img)
-    plt.show()
+    #
+    # Using the trained network
+    #
 
-    # Wrap the array with another array so the images has required shape
-    img = np.expand_dims(img, 0)
+    while True:
+        print('Would you like to enter image of a single emoji or a collage of multiple emojis? single/collage')
+        img_type = input()
 
-    predictions = model.predict(img)
+        if img_type.lower() != 'collage' and img_type.lower() != 'single':
+            print('Invalid input, please try again.')
+            time.sleep(0.5)
 
-    print(f'Boop! Beep! Boop! The machine thinks that this is {to_class(predictions)}')
+        print('Please enter the path to image: ')
+        img_path = input()
+
+        if img_type.lower() == 'single':
+            predict_one(model, img_path)
+
+        else:
+            predict_batch(model, img_path)
